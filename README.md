@@ -1,31 +1,32 @@
 # Sheep Herding Simulation
 
-A lightweight browser simulation of sheep on a mountainside being herded into a sheep pen.
+A lightweight browser simulation where you control a shepherd and chase a flock across an isometric mountainside.
 
-### Scene
+## Features
 
--  Valley and a hill
--  Pen with a dor open
+- Large isometric field with a matching terrain background
+- Valley + hill terrain shaping sheep movement
+- Pen in the upper-right with an interactive orange gate
+- Food piles at the back of the pen
+- Sheep flocking behavior: flee from shepherd pressure
+- Sheep flocking behavior: soft separation (avoid crowding)
+- Sheep flocking behavior: alignment and cohesion (move in loose groups)
+- Sheep flocking behavior: random scatter targets for playful chasing
+- Collision handling: sheep-sheep collision
+- Collision handling: shepherd-sheep collision
+- Collision handling: fence and world-boundary collision
+- Debug tools: grid toggle
+- Debug tools: build timestamp display
+- Debug tools: live weight sliders
+- Debug tools: YAML export/import preset flow
 
-### Game Engine
- - Rendering is isometric.
- - Debug mode to draw the grid on the scene
+## Implementation
 
-### Collision engine
- - Sheep should not be able to be in the same place at same time, collision of sheep
- - Shepard should have same collision rules as sheep
-
-### Implementation
- - Javascript 
-
-### non-functional
- - print build time at top in debug mode 
+- Vanilla JavaScript + HTML Canvas
 
 ## Run
 
-Open `index.html` in your browser.
-
-If you prefer a local server:
+Open `index.html` directly, or run a local server:
 
 ```bash
 python3 -m http.server 8080
@@ -35,6 +36,11 @@ Then open `http://localhost:8080`.
 
 ## Controls
 
-- Move your pointer/finger on the canvas to move the shepherd.
-- Push sheep uphill and guide them into the fenced pen in the upper-right.
-- Press `G` near the orange gate to close/open it.
+- Move pointer/finger on the canvas to move the shepherd
+- Press `G` near the gate to open/close it
+- Press `D` to toggle debug mode
+
+## Debug Weights YAML
+
+- Export from debug panel: `Export YAML`
+- Default preset path loaded on startup (when served): `config/sheep-weights.yml`

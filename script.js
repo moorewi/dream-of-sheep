@@ -9,17 +9,25 @@
   const exportYamlBtn = document.getElementById("exportYaml");
 
   const world = {
-    width: 28,
-    height: 20,
+    width: 42,
+    height: 30,
     tileW: 54,
     tileH: 28,
     elevationScale: 16,
   };
+  const terrainAnchors = {
+    hillX: world.width - 6,
+    hillY: 5.2,
+    valleyX: world.width * 0.27,
+    valleyY: world.height * 0.8,
+  };
+  const backgroundPad = 8;
 
   const camera = {
     x: 0,
     y: 0,
   };
+  let viewScale = 1;
 
   const pointer = {
     active: false,
@@ -28,21 +36,22 @@
   };
 
   const pen = {
-    x1: 20,
-    y1: 2,
-    x2: 26,
-    y2: 8,
-    doorY: 4.9,
-    doorSize: 1.2,
+    x1: 33,
+    y1: 3,
+    x2: 40,
+    y2: 11,
+    doorY: 6.2,
+    doorSize: 1.5,
   };
   const gate = {
     closed: false,
     interactRadius: 1.2,
   };
   const foodPiles = [
-    { x: 24.2, y: 2.9, amount: 1 },
-    { x: 25.1, y: 3.6, amount: 1 },
-    { x: 23.5, y: 3.4, amount: 1 },
+    { x: 38, y: 4.1, amount: 1 },
+    { x: 37, y: 5.3, amount: 1 },
+    { x: 39, y: 5.1, amount: 1 },
+    { x: 36.2, y: 4.4, amount: 1 },
   ];
 
   const shepherd = {
@@ -50,20 +59,24 @@
     y: world.height * 0.72,
     radius: 0.34,
     speed: 4.7,
+    heading: 0,
   };
 
   const SHEEP_TOTAL = 18;
   const sheep = [];
   for (let i = 0; i < SHEEP_TOTAL; i += 1) {
     sheep.push({
-      x: 4 + Math.random() * 7,
-      y: 10 + Math.random() * 6,
+      x: 6 + Math.random() * 11,
+      y: 16 + Math.random() * 9,
       vx: 0,
       vy: 0,
       radius: 0.31,
       wanderAngle: Math.random() * Math.PI * 2,
       panic: 0,
       heading: Math.random() * Math.PI * 2,
+      scatterX: 0,
+      scatterY: 0,
+      scatterTimer: 0,
     });
   }
 
@@ -137,31 +150,53 @@
   }
 
   function terrainHeight(x, y) {
-    const hillDx = x - 22.5;
-    const hillDy = y - 4.4;
-    const hill = Math.exp(-(hillDx * hillDx + hillDy * hillDy) / 52) * 4.4;
+    const hillDx = x - terrainAnchors.hillX;
+    const hillDy = y - terrainAnchors.hillY;
+    const hill = Math.exp(-(hillDx * hillDx + hillDy * hillDy) / 90) * 4.6;
 
-    const valleyDx = x - 7;
-    const valleyDy = y - 14.5;
-    const valley = Math.exp(-(valleyDx * valleyDx + valleyDy * valleyDy) / 36) * 2.1;
+    const valleyDx = x - terrainAnchors.valleyX;
+    const valleyDy = y - terrainAnchors.valleyY;
+    const valley = Math.exp(-(valleyDx * valleyDx + valleyDy * valleyDy) / 70) * 2.4;
 
     const ripple = Math.sin((x + y) * 0.6) * 0.16;
     return hill - valley + ripple;
   }
 
   function worldToScreen(x, y, z = 0) {
+    const tileW = world.tileW * viewScale;
+    const tileH = world.tileH * viewScale;
+    const elev = world.elevationScale * viewScale;
     return {
-      x: camera.x + (x - y) * (world.tileW / 2),
-      y: camera.y + (x + y) * (world.tileH / 2) - z * world.elevationScale,
+      x: camera.x + (x - y) * (tileW / 2),
+      y: camera.y + (x + y) * (tileH / 2) - z * elev,
     };
   }
 
   function screenToWorld(x, y) {
+    const tileW = world.tileW * viewScale;
+    const tileH = world.tileH * viewScale;
     const dx = x - camera.x;
     const dy = y - camera.y;
-    const wx = (dx / (world.tileW / 2) + dy / (world.tileH / 2)) * 0.5;
-    const wy = (dy / (world.tileH / 2) - dx / (world.tileW / 2)) * 0.5;
+    const wx = (dx / (tileW / 2) + dy / (tileH / 2)) * 0.5;
+    const wy = (dy / (tileH / 2) - dx / (tileW / 2)) * 0.5;
     return { x: wx, y: wy };
+  }
+
+  function getTerrainZRange() {
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let y = 0; y <= world.height; y += 1) {
+      for (let x = 0; x <= world.width; x += 1) {
+        const z = terrainHeight(x, y);
+        if (z < minZ) {
+          minZ = z;
+        }
+        if (z > maxZ) {
+          maxZ = z;
+        }
+      }
+    }
+    return { minZ, maxZ };
   }
 
   function resize() {
@@ -170,8 +205,25 @@
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor(rect.height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    camera.x = rect.width * 0.42;
-    camera.y = rect.height * 0.16;
+
+    const margin = 24;
+    const { minZ, maxZ } = getTerrainZRange();
+    const isoWidth = (world.width + world.height) * (world.tileW / 2);
+    const isoHeight = (world.width + world.height) * (world.tileH / 2) + (maxZ - minZ) * world.elevationScale;
+    const fitW = Math.max(0.2, (rect.width - margin * 2) / isoWidth);
+    const fitH = Math.max(0.2, (rect.height - margin * 2) / isoHeight);
+    viewScale = Math.min(fitW, fitH);
+
+    const tileW = world.tileW * viewScale;
+    const tileH = world.tileH * viewScale;
+    const elev = world.elevationScale * viewScale;
+    const minXNoCamera = -world.height * (tileW / 2);
+    const maxXNoCamera = world.width * (tileW / 2);
+    const minYNoCamera = -maxZ * elev;
+    const maxYNoCamera = (world.width + world.height) * (tileH / 2) - minZ * elev;
+
+    camera.x = (rect.width - (maxXNoCamera - minXNoCamera)) * 0.5 - minXNoCamera;
+    camera.y = (rect.height - (maxYNoCamera - minYNoCamera)) * 0.5 - minYNoCamera;
   }
 
   function segmentPush(entity, x1, y1, x2, y2) {
@@ -273,8 +325,19 @@
 
     if (pointer.active && distToTarget > 0.02) {
       const step = Math.min(distToTarget, shepherd.speed * dt);
+      const moveX = (toTargetX / distToTarget) * step;
+      const moveY = (toTargetY / distToTarget) * step;
       shepherd.x += (toTargetX / distToTarget) * step;
       shepherd.y += (toTargetY / distToTarget) * step;
+      const screenDirX = moveX - moveY;
+      const screenDirY = moveX + moveY;
+      if (Math.hypot(screenDirX, screenDirY) > 0.001) {
+        shepherd.heading = turnToward(
+          shepherd.heading,
+          Math.atan2(screenDirY, screenDirX),
+          8 * dt
+        );
+      }
     }
 
     for (let i = 0; i < sheep.length; i += 1) {
@@ -282,14 +345,14 @@
       s.wanderAngle += (Math.random() - 0.5) * 0.95;
 
       const [wanderX, wanderY] = [Math.cos(s.wanderAngle), Math.sin(s.wanderAngle)];
-      const peakDx = s.x - 23;
-      const peakDy = s.y - 4;
+      const peakDx = s.x - terrainAnchors.hillX;
+      const peakDy = s.y - terrainAnchors.hillY;
       const [downhillX, downhillY] = normalize(peakDx, peakDy);
 
       const fromShepherdX = s.x - shepherd.x;
       const fromShepherdY = s.y - shepherd.y;
       const shepherdDist = Math.hypot(fromShepherdX, fromShepherdY);
-      const fearRadius = 3.3;
+      const fearRadius = 5.4;
       let fearX = 0;
       let fearY = 0;
 
@@ -302,9 +365,18 @@
         s.panic *= 0.94;
       }
 
-      const penBiasX = pen.x1 + 1.2 - s.x;
-      const penBiasY = pen.doorY + pen.doorSize * 0.5 - s.y;
-      const [penX, penY] = normalize(penBiasX, penBiasY);
+      s.scatterTimer -= dt;
+      if (
+        s.scatterTimer <= 0 ||
+        Math.hypot(s.scatterX - s.x, s.scatterY - s.y) < 0.9
+      ) {
+        const roamRange = 7 + Math.random() * 5;
+        const roamAngle = Math.random() * Math.PI * 2;
+        s.scatterX = clamp(s.x + Math.cos(roamAngle) * roamRange, 1, world.width - 1);
+        s.scatterY = clamp(s.y + Math.sin(roamAngle) * roamRange, 1, world.height - 1);
+        s.scatterTimer = 1.8 + Math.random() * 2.7;
+      }
+      const [scatterX, scatterY] = normalize(s.scatterX - s.x, s.scatterY - s.y);
       let nearestFood = foodPiles[0];
       let nearestFoodDist = Infinity;
       for (const pile of foodPiles) {
@@ -321,8 +393,14 @@
       const [foodX, foodY] = normalize(foodBiasX, foodBiasY);
       let separateX = 0;
       let separateY = 0;
+      let alignX = 0;
+      let alignY = 0;
+      let centerX = 0;
+      let centerY = 0;
+      let flockCount = 0;
       const desiredGap = s.radius * 2.2;
       const neighborRadius = desiredGap * 1.8;
+      const flockRadius = 4.2;
       for (let j = 0; j < sheep.length; j += 1) {
         if (j === i) {
           continue;
@@ -332,6 +410,18 @@
         const dy = s.y - other.y;
         const dist = Math.hypot(dx, dy);
         if (dist <= 0.0001 || dist > neighborRadius) {
+          if (dist > flockRadius) {
+            continue;
+          }
+        }
+        if (dist <= flockRadius) {
+          centerX += other.x;
+          centerY += other.y;
+          alignX += other.vx;
+          alignY += other.vy;
+          flockCount += 1;
+        }
+        if (dist > neighborRadius || dist <= 0.0001) {
           continue;
         }
         const closeness = clamp((neighborRadius - dist) / neighborRadius, 0, 1);
@@ -340,38 +430,51 @@
         separateY += (dy / dist) * pressure;
       }
       const [sepX, sepY] = normalize(separateX, separateY);
+      let cohX = 0;
+      let cohY = 0;
+      let aliX = 0;
+      let aliY = 0;
+      if (flockCount > 0) {
+        const avgX = centerX / flockCount;
+        const avgY = centerY / flockCount;
+        [cohX, cohY] = normalize(avgX - s.x, avgY - s.y);
+        [aliX, aliY] = normalize(alignX / flockCount, alignY / flockCount);
+      }
 
       const speed = behaviorWeights.speedBase + s.panic * behaviorWeights.panicSpeedBoost;
       const downhillWeight = Math.max(
         0,
         behaviorWeights.downhillBase * (1 - s.panic * behaviorWeights.downhillPanicDecay)
       );
-      const penWeight = behaviorWeights.penBase + s.panic * behaviorWeights.penPanicBoost;
       const wanderWeight = Math.max(0, behaviorWeights.wanderBase - s.panic * behaviorWeights.wanderPanicDecay);
       const fearWeight = behaviorWeights.fearWeight;
       const separationWeight = 0.9 + s.panic * 0.25;
-      const inOrNearPen =
-        s.x > pen.x1 - 1.6 &&
-        s.x < pen.x2 + 0.8 &&
-        s.y > pen.y1 - 1.3 &&
-        s.y < pen.y2 + 0.8;
-      const foodWeightBase = inOrNearPen ? 0.9 : 0.22;
+      const scatterWeight = Math.max(0.08, 0.34 - s.panic * 0.22);
+      const fearDrive = fearWeight * (1.25 + s.panic * 1.15);
+      const cohesionWeight = Math.max(0.05, 0.32 - s.panic * 0.18);
+      const alignmentWeight = Math.max(0.04, 0.28 - s.panic * 0.16);
+      const inPen = isInPen(s);
+      const foodWeightBase = inPen ? 0.9 : 0;
       const foodWeight = foodWeightBase * clamp((8 - nearestFoodDist) / 8, 0, 1);
 
       s.vx = (
         wanderX * wanderWeight +
+        scatterX * scatterWeight +
         downhillX * downhillWeight +
-        fearX * fearWeight +
+        fearX * fearDrive +
+        cohX * cohesionWeight +
+        aliX * alignmentWeight +
         sepX * separationWeight +
-        penX * penWeight +
         foodX * foodWeight
       ) * speed;
       s.vy = (
         wanderY * wanderWeight +
+        scatterY * scatterWeight +
         downhillY * downhillWeight +
-        fearY * fearWeight +
+        fearY * fearDrive +
+        cohY * cohesionWeight +
+        aliY * alignmentWeight +
         sepY * separationWeight +
-        penY * penWeight +
         foodY * foodWeight
       ) * speed;
 
@@ -413,7 +516,7 @@
     syncGateStatus();
   }
 
-  function drawTile(x, y) {
+  function drawTile(x, y, backdrop = false) {
     const z00 = terrainHeight(x, y);
     const z10 = terrainHeight(x + 1, y);
     const z11 = terrainHeight(x + 1, y + 1);
@@ -426,9 +529,10 @@
 
     const avg = (z00 + z10 + z11 + z01) * 0.25;
     const tone = clamp((avg + 1.2) / 5, 0, 1);
-    const hue = 98 - tone * 18;
-    const sat = 22 + tone * 24;
-    const lit = 40 + tone * 14;
+    const hue = backdrop ? 103 - tone * 10 : 98 - tone * 18;
+    const sat = backdrop ? 12 + tone * 12 : 22 + tone * 24;
+    const lit = backdrop ? 46 + tone * 12 : 40 + tone * 14;
+    const alpha = backdrop ? 0.72 : 1;
 
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
@@ -436,10 +540,10 @@
     ctx.lineTo(p2.x, p2.y);
     ctx.lineTo(p3.x, p3.y);
     ctx.closePath();
-    ctx.fillStyle = `hsl(${hue} ${sat}% ${lit}%)`;
+    ctx.fillStyle = `hsl(${hue} ${sat}% ${lit}% / ${alpha})`;
     ctx.fill();
 
-    if (debugGrid) {
+    if (debugGrid && !backdrop) {
       ctx.strokeStyle = "rgba(15, 30, 14, 0.28)";
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -571,24 +675,30 @@
     ctx.ellipse(p.x, p.y + 9, 12, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(shepherd.heading);
+
     ctx.fillStyle = "#4a2d1d";
     ctx.beginPath();
-    ctx.ellipse(p.x - 2, p.y, 13, 7.5, -0.2, 0, Math.PI * 2);
+    ctx.ellipse(-2, 0, 13, 7.5, -0.2, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#f2d28d";
     ctx.beginPath();
-    ctx.arc(p.x + 9, p.y - 1, 3.5, 0, Math.PI * 2);
+    ctx.arc(9, -1, 3.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
   function render() {
     const { width, height } = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, width, height);
 
-    for (let y = 0; y < world.height; y += 1) {
-      for (let x = 0; x < world.width; x += 1) {
-        drawTile(x, y);
+    for (let y = -backgroundPad; y < world.height + backgroundPad; y += 1) {
+      for (let x = -backgroundPad; x < world.width + backgroundPad; x += 1) {
+        const inPlayable = x >= 0 && x < world.width && y >= 0 && y < world.height;
+        drawTile(x, y, !inPlayable);
       }
     }
 
