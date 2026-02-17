@@ -53,12 +53,45 @@
     { x: 39, y: 5.1, amount: 1 },
     { x: 36.2, y: 4.4, amount: 1 },
   ];
+  const trees = [
+    { x: 3.2, y: 5.4, size: 1.1 },
+    { x: 5.7, y: 3.8, size: 1.2 },
+    { x: 8.9, y: 4.6, size: 1.05 },
+    { x: 11.4, y: 6.2, size: 1.15 },
+    { x: 2.8, y: 11.1, size: 1.2 },
+    { x: 6.3, y: 12.7, size: 1.1 },
+    { x: 10.1, y: 13.5, size: 1.25 },
+    { x: 36.2, y: 20.4, size: 1.25 },
+    { x: 39, y: 22.1, size: 1.2 },
+    { x: 33.7, y: 23.8, size: 1.15 },
+    { x: 30.4, y: 24.6, size: 1.05 },
+    { x: 24.6, y: 19.2, size: 1.1 },
+    { x: 26.9, y: 15.4, size: 1.05 },
+    { x: 22.2, y: 6.4, size: 1.15 },
+    { x: 13.8, y: 3.6, size: 1.1 },
+    { x: 16.2, y: 5.1, size: 1.25 },
+    { x: 18.7, y: 4.2, size: 1.05 },
+    { x: 14.1, y: 10.2, size: 1.2 },
+    { x: 17.5, y: 12.1, size: 1.1 },
+    { x: 20.3, y: 14.4, size: 1.15 },
+    { x: 9.7, y: 18.1, size: 1.25 },
+    { x: 12.9, y: 20.3, size: 1.1 },
+    { x: 15.6, y: 22.5, size: 1.05 },
+    { x: 19.4, y: 24.1, size: 1.2 },
+    { x: 24.1, y: 24.8, size: 1.15 },
+    { x: 27.7, y: 21.7, size: 1.1 },
+    { x: 31.4, y: 19.3, size: 1.2 },
+    { x: 34.6, y: 17.8, size: 1.05 },
+    { x: 6.1, y: 22.2, size: 1.2 },
+    { x: 4.3, y: 18.9, size: 1.05 },
+    { x: 2.6, y: 15.8, size: 1.15 },
+  ];
 
   const shepherd = {
     x: world.width * 0.25,
     y: world.height * 0.72,
     radius: 0.34,
-    speed: 4.7,
+    speed: 6.6,
     heading: 0,
   };
 
@@ -641,6 +674,38 @@
     }
   }
 
+  function drawTree(tree) {
+    const z = terrainHeight(tree.x, tree.y);
+    const p = worldToScreen(tree.x, tree.y, z + 0.1);
+    const s = tree.size;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.13)";
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 8 * s, 12 * s, 5 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#6b4a2d";
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 1 * s, 4.2 * s, 8.5 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#315f34";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 16 * s, 13 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#3f7642";
+    ctx.beginPath();
+    ctx.arc(p.x - 8 * s, p.y - 12 * s, 9 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x + 9 * s, p.y - 11 * s, 8.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x + 2 * s, p.y - 21 * s, 8 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   function drawSheepEntity(s) {
     const z = terrainHeight(s.x, s.y);
     const p = worldToScreen(s.x, s.y, z + 0.55);
@@ -705,13 +770,19 @@
     drawFence();
     drawFoodPiles();
 
-    const drawables = sheep
+    const drawables = trees
+      .map((t) => ({ type: "tree", obj: t, sort: t.x + t.y }))
+      .concat(
+        sheep
       .map((s) => ({ type: "sheep", obj: s, sort: s.x + s.y }))
       .concat([{ type: "shepherd", obj: shepherd, sort: shepherd.x + shepherd.y }])
+      )
       .sort((a, b) => a.sort - b.sort);
 
     for (const item of drawables) {
-      if (item.type === "sheep") {
+      if (item.type === "tree") {
+        drawTree(item.obj);
+      } else if (item.type === "sheep") {
         drawSheepEntity(item.obj);
       } else {
         drawShepherd();
