@@ -1,0 +1,12 @@
+build_time: "17/02/2026, 20:10:36"
+exported_at: 2026-02-17T19:11:10.875Z
+weights:
+  speedBase: 1.870
+  panicSpeedBoost: 1.700
+  downhillBase: 0.000
+  downhillPanicDecay: 0.650
+  penBase: 1.090
+  penPanicBoost: 0.820
+  wanderBase: 0.400
+  wanderPanicDecay: 0.200
+  fearWeight: 1.650

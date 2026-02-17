@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sheep Herding on the Mountainside</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hud">
+      <h1>Sheep Herding <small id="buildStamp">build --</small></h1>
+      <p>Move the shepherd with your pointer and guide the flock across the mountainside. Press G near the gate to close it.</p>
+      <div class="stats">
+        <span id="sheepCount">Sheep: 0</span>
+        <span id="gateStatus">Gate: Open</span>
+      </div>
+      <section id="debugPanel" class="debug-panel" aria-label="Debug controls">
+        <div class="debug-header">
+          <strong>Debug Weights</strong>
+          <button id="exportYaml" type="button">Export YAML</button>
+        </div>
+        <div id="weightControls" class="weight-controls"></div>
+      </section>
+    </header>
+    <canvas id="world" aria-label="Sheep herding simulation"></canvas>
+  </main>
+  <script src="script.js?v=202602172021"></script>
+</body>
+</html>
