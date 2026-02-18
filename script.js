@@ -34,6 +34,7 @@
 
   const pointer = {
     active: false,
+    sprintHeld: false,
     worldX: world.width * 0.3,
     worldY: world.height * 0.7,
   };
@@ -56,7 +57,7 @@
     { x: 39, y: 5.1, amount: 1 },
     { x: 36.2, y: 4.4, amount: 1 },
   ];
-  const trees = [
+  const treeSeeds = [
     { x: 3.2, y: 5.4, size: 1.1 },
     { x: 5.7, y: 3.8, size: 1.2 },
     { x: 8.9, y: 4.6, size: 1.05 },
@@ -89,6 +90,47 @@
     { x: 4.3, y: 18.9, size: 1.05 },
     { x: 2.6, y: 15.8, size: 1.15 },
   ];
+  const edgeTreeRows = [2.2, 4.6, 7.1, 9.8, 12.4, 15.2, 18.3, 21.1, 24.2, 27.0];
+  const edgeTrees = edgeTreeRows.flatMap((y, i) => {
+    const row = getRowBounds(y);
+    const left = {
+      x: row.minX + 0.55 + (i % 2) * 0.28,
+      y,
+      size: 1.05 + ((i * 0.17) % 0.35),
+    };
+    const rightSideBlockedByPen = y > pen.y1 - 0.7 && y < pen.y2 + 0.7;
+    if (rightSideBlockedByPen) {
+      return [left];
+    }
+    const right = {
+      x: row.maxX - 0.6 - ((i + 1) % 2) * 0.25,
+      y: y + ((i % 3) - 1) * 0.18,
+      size: 1.08 + ((i * 0.13) % 0.42),
+    };
+    return [left, right];
+  });
+  const treeTypes = ["round", "pine", "bushy", "lean"];
+  const trees = treeSeeds.concat(edgeTrees).map((t, i) => {
+    const jitter = 0.8 + (Math.sin(i * 2.17) + 1) * 0.2;
+    return {
+      x: t.x,
+      y: t.y,
+      size: Number((Math.max(1.6, t.size * jitter * 2)).toFixed(2)),
+      type: treeTypes[i % treeTypes.length],
+    };
+  });
+  const boulders = [
+    { x: 7.4, y: 8.1, size: 1.9 },
+    { x: 12.2, y: 16.8, size: 2.2 },
+    { x: 20.8, y: 11.9, size: 1.8 },
+    { x: 25.4, y: 22.3, size: 2.4 },
+    { x: 31.8, y: 14.6, size: 2.1 },
+    { x: 35.2, y: 25.1, size: 1.9 },
+    { x: 15.7, y: 25.6, size: 2.3 },
+  ];
+  const staticObstacles = trees
+    .map((t) => ({ x: t.x, y: t.y, radius: Math.max(0.45, t.size * 0.34) }))
+    .concat(boulders.map((b) => ({ x: b.x, y: b.y, radius: Math.max(0.7, b.size * 0.52) })));
 
   const shepherd = {
     x: world.width * 0.25,
@@ -96,9 +138,11 @@
     radius: 0.34,
     speed: 6.6,
     heading: 0,
-    sprintTimer: 0,
-    sprintDuration: 1.0,
     sprintMultiplier: 1.26,
+    sprintEnergy: 1,
+    sprintDrainRate: 0.95,
+    sprintRegenRate: 0.34,
+    sprinting: false,
   };
 
   const SHEEP_TOTAL = 18;
@@ -154,6 +198,10 @@
     wanderPanicDecay: 0.2,
     fearWeight: 1.65,
   };
+  const trailResolution = 5;
+  const trailGridWidth = world.width * trailResolution;
+  const trailGridHeight = world.height * trailResolution;
+  const trailWear = new Float32Array(trailGridWidth * trailGridHeight);
 
   function clamp(v, min, max) {
     return Math.max(min, Math.min(max, v));
@@ -169,6 +217,38 @@
       return [0, 0];
     }
     return [x / l, y / l];
+  }
+
+  function trailIndex(tx, ty) {
+    return ty * trailGridWidth + tx;
+  }
+
+  function sampleTrailWear(x, y) {
+    const gx = clamp(Math.floor(x * trailResolution), 0, trailGridWidth - 1);
+    const gy = clamp(Math.floor(y * trailResolution), 0, trailGridHeight - 1);
+    return trailWear[trailIndex(gx, gy)];
+  }
+
+  function stampTrailWear(x, y, amount) {
+    const cx = clamp(Math.floor(x * trailResolution), 0, trailGridWidth - 1);
+    const cy = clamp(Math.floor(y * trailResolution), 0, trailGridHeight - 1);
+    const radius = 2;
+    for (let oy = -radius; oy <= radius; oy += 1) {
+      for (let ox = -radius; ox <= radius; ox += 1) {
+        const nx = cx + ox;
+        const ny = cy + oy;
+        if (nx < 0 || ny < 0 || nx >= trailGridWidth || ny >= trailGridHeight) {
+          continue;
+        }
+        const d = Math.hypot(ox, oy);
+        if (d > radius + 0.01) {
+          continue;
+        }
+        const falloff = 1 - d / (radius + 0.01);
+        const nIdx = trailIndex(nx, ny);
+        trailWear[nIdx] = clamp(trailWear[nIdx] + amount * (0.35 + falloff * 0.65), 0, 1);
+      }
+    }
   }
 
   function getRowBounds(y) {
@@ -264,13 +344,13 @@
     canvas.height = Math.floor(rect.height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const margin = 24;
+    const margin = 8;
     const { minZ, maxZ } = getTerrainZRange();
     const isoWidth = (world.width + world.height) * (world.tileW / 2);
     const isoHeight = (world.width + world.height) * (world.tileH / 2) + (maxZ - minZ) * world.elevationScale;
     const fitW = Math.max(0.2, (rect.width - margin * 2) / isoWidth);
     const fitH = Math.max(0.2, (rect.height - margin * 2) / isoHeight);
-    viewScale = Math.min(fitW, fitH);
+    viewScale = Math.min(fitW, fitH) * 1.05;
 
     const tileW = world.tileW * viewScale;
     const tileH = world.tileH * viewScale;
@@ -359,12 +439,11 @@
     if (!sprintStatusEl || !sprintBarEl) {
       return;
     }
-    const duration = Math.max(0.001, shepherd.sprintDuration);
-    const ratio = clamp(shepherd.sprintTimer / duration, 0, 1);
+    const ratio = clamp(shepherd.sprintEnergy, 0, 1);
     sprintBarEl.style.width = `${(ratio * 100).toFixed(1)}%`;
-    sprintStatusEl.textContent = shepherd.sprintTimer > 0
-      ? `Sprint: ${shepherd.sprintTimer.toFixed(1)}s`
-      : "Sprint: ready";
+    sprintStatusEl.textContent = shepherd.sprinting
+      ? `Power: ${(ratio * 100).toFixed(0)}% (sprinting)`
+      : `Power: ${(ratio * 100).toFixed(0)}%`;
   }
 
   function syncPauseButton() {
@@ -398,6 +477,25 @@
     b.y += ny * push;
   }
 
+  function collideStaticObstacles(entity) {
+    for (const obstacle of staticObstacles) {
+      const dx = entity.x - obstacle.x;
+      const dy = entity.y - obstacle.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = entity.radius + obstacle.radius;
+      if (dist <= 0.0001) {
+        entity.x += 0.01;
+        entity.y += 0.01;
+        continue;
+      }
+      if (dist < minDist) {
+        const push = minDist - dist;
+        entity.x += (dx / dist) * push;
+        entity.y += (dy / dist) * push;
+      }
+    }
+  }
+
   function isInPen(entity) {
     return (
       entity.x > pen.x1 + 0.25 &&
@@ -408,13 +506,25 @@
   }
 
   function update(dt) {
-    shepherd.sprintTimer = Math.max(0, shepherd.sprintTimer - dt);
+    for (let i = 0; i < trailWear.length; i += 1) {
+      trailWear[i] = Math.max(0, trailWear[i] - dt * 0.01);
+    }
+
+    const sprintRequested = pointer.sprintHeld;
+    if (sprintRequested && shepherd.sprintEnergy > 0.001) {
+      shepherd.sprinting = true;
+      shepherd.sprintEnergy = Math.max(0, shepherd.sprintEnergy - shepherd.sprintDrainRate * dt);
+    } else {
+      shepherd.sprinting = false;
+      shepherd.sprintEnergy = Math.min(1, shepherd.sprintEnergy + shepherd.sprintRegenRate * dt);
+    }
+
     const toTargetX = pointer.worldX - shepherd.x;
     const toTargetY = pointer.worldY - shepherd.y;
     const distToTarget = Math.hypot(toTargetX, toTargetY);
 
     if (pointer.active && distToTarget > 0.02) {
-      const sprintBoost = shepherd.sprintTimer > 0 ? shepherd.sprintMultiplier : 1;
+      const sprintBoost = shepherd.sprinting ? shepherd.sprintMultiplier : 1;
       const step = Math.min(distToTarget, shepherd.speed * sprintBoost * dt);
       const moveX = (toTargetX / distToTarget) * step;
       const moveY = (toTargetY / distToTarget) * step;
@@ -585,6 +695,7 @@
     for (let n = 0; n < 3; n += 1) {
       for (let i = 0; i < sheep.length; i += 1) {
         collideFences(sheep[i]);
+        collideStaticObstacles(sheep[i]);
         enforceWorldBounds(sheep[i]);
       }
 
@@ -599,7 +710,16 @@
       }
 
       collideFences(shepherd);
+      collideStaticObstacles(shepherd);
       enforceWorldBounds(shepherd);
+    }
+
+    for (let i = 0; i < sheep.length; i += 1) {
+      const s = sheep[i];
+      if (isInPlayableArea(s.x, s.y)) {
+        const effort = Math.hypot(s.vx, s.vy);
+        stampTrailWear(s.x, s.y, dt * (0.22 + effort * 0.11));
+      }
     }
 
     const penned = sheep.filter(isInPen).length;
@@ -621,10 +741,26 @@
 
     const avg = (z00 + z10 + z11 + z01) * 0.25;
     const tone = clamp((avg + 1.2) / 5, 0, 1);
-    const hue = backdrop ? 103 - tone * 10 : 98 - tone * 18;
-    const sat = backdrop ? 12 + tone * 12 : 22 + tone * 24;
-    const lit = backdrop ? 46 + tone * 12 : 40 + tone * 14;
+    let hue = backdrop ? 103 - tone * 10 : 98 - tone * 18;
+    let sat = backdrop ? 12 + tone * 12 : 22 + tone * 24;
+    let lit = backdrop ? 46 + tone * 12 : 40 + tone * 14;
     const alpha = backdrop ? 0.72 : 1;
+
+    if (!backdrop) {
+      const wear = sampleTrailWear(x + 0.5, y + 0.5);
+      if (wear > 0) {
+        if (wear < 0.55) {
+          hue -= wear * 10;
+          sat += wear * 5;
+          lit -= wear * 13;
+        } else {
+          const k = (wear - 0.55) / 0.45;
+          hue = hue * (1 - k) + 31 * k;
+          sat = sat * (1 - k) + 34 * k;
+          lit = lit * (1 - k) + 28 * k;
+        }
+      }
+    }
 
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
@@ -805,26 +941,153 @@
     ctx.ellipse(p.x, p.y + 8 * s, 12 * s, 5 * s, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#6b4a2d";
+    if (tree.type === "pine") {
+      ctx.fillStyle = "#69492f";
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 2.2 * s, 3.2 * s, 9.2 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#2f6438";
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 28 * s);
+      ctx.lineTo(p.x - 10.5 * s, p.y - 10 * s);
+      ctx.lineTo(p.x + 10.5 * s, p.y - 10 * s);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#3a7744";
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - 22 * s);
+      ctx.lineTo(p.x - 12 * s, p.y - 1 * s);
+      ctx.lineTo(p.x + 12 * s, p.y - 1 * s);
+      ctx.closePath();
+      ctx.fill();
+    } else if (tree.type === "lean") {
+      ctx.fillStyle = "#6a482e";
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(-0.18);
+      ctx.beginPath();
+      ctx.ellipse(0, 2.2 * s, 3.8 * s, 10.8 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = "#2f6038";
+      ctx.beginPath();
+      ctx.arc(p.x + 4 * s, p.y - 17 * s, 11 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#3e7948";
+      ctx.beginPath();
+      ctx.arc(p.x - 4 * s, p.y - 12 * s, 8.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (tree.type === "bushy") {
+      ctx.fillStyle = "#6f4c30";
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 3 * s, 4.8 * s, 8.2 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#3f7e49";
+      ctx.beginPath();
+      ctx.arc(p.x - 9 * s, p.y - 10 * s, 9 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x + 10 * s, p.y - 10 * s, 9 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#2f693a";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y - 16 * s, 11.8 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x + 1 * s, p.y - 4 * s, 8.2 * s, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#6b4a2d";
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 1 * s, 4.2 * s, 8.5 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#315f34";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y - 16 * s, 13 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#3f7642";
+      ctx.beginPath();
+      ctx.arc(p.x - 8 * s, p.y - 12 * s, 9 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x + 9 * s, p.y - 11 * s, 8.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x + 2 * s, p.y - 21 * s, 8 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawBoulder(b) {
+    const z = terrainHeight(b.x, b.y);
+    const p = worldToScreen(b.x, b.y, z + 0.08);
+    const s = b.size;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 1 * s, 4.2 * s, 8.5 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y + 7 * s, 12 * s, 5 * s, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#315f34";
+    ctx.fillStyle = "#8d8f86";
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 16 * s, 13 * s, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y - 1 * s, 9.5 * s, 7 * s, -0.12, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#3f7642";
+    ctx.fillStyle = "#767a72";
     ctx.beginPath();
-    ctx.arc(p.x - 8 * s, p.y - 12 * s, 9 * s, 0, Math.PI * 2);
+    ctx.ellipse(p.x - 5.2 * s, p.y - 0.8 * s, 4.2 * s, 3.4 * s, 0.18, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(p.x + 9 * s, p.y - 11 * s, 8.5 * s, 0, Math.PI * 2);
+    ctx.ellipse(p.x + 4.8 * s, p.y - 2.6 * s, 3.8 * s, 2.9 * s, -0.2, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.strokeStyle = "rgba(248, 250, 244, 0.34)";
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
-    ctx.arc(p.x + 2 * s, p.y - 21 * s, 8 * s, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(p.x - 1.8 * s, p.y - 4.6 * s, 3.6 * s, Math.PI * 1.12, Math.PI * 1.95);
+    ctx.stroke();
+  }
+
+  function drawTrailOverlay() {
+    const step = 1 / trailResolution;
+    for (let gy = 0; gy < trailGridHeight; gy += 1) {
+      for (let gx = 0; gx < trailGridWidth; gx += 1) {
+        const wear = trailWear[trailIndex(gx, gy)];
+        if (wear < 0.08) {
+          continue;
+        }
+        const wx = (gx + 0.5) * step;
+        const wy = (gy + 0.5) * step;
+        if (!isInPlayableArea(wx, wy)) {
+          continue;
+        }
+        const z = terrainHeight(wx, wy) + 0.02;
+        const p = worldToScreen(wx, wy, z);
+        const tone = clamp((wear - 0.08) / 0.92, 0, 1);
+        const hue = 110 * (1 - tone) + 29 * tone;
+        const sat = 34 * (1 - tone) + 41 * tone;
+        const lit = 34 * (1 - tone) + 25 * tone;
+        const alpha = 0.08 + tone * 0.24;
+        ctx.fillStyle = `hsla(${hue} ${sat}% ${lit}% / ${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(
+          p.x,
+          p.y,
+          Math.max(0.6, 1.7 * viewScale),
+          Math.max(0.4, 0.9 * viewScale),
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+    }
   }
 
   function drawSheepEntity(s) {
@@ -909,12 +1172,16 @@
         drawTile(x, y, !inPlayable);
       }
     }
+    drawTrailOverlay();
 
     drawFence();
     drawFoodPiles();
 
     const drawables = trees
       .map((t) => ({ type: "tree", obj: t, sort: t.x + t.y }))
+      .concat(
+        boulders.map((b) => ({ type: "boulder", obj: b, sort: b.x + b.y }))
+      )
       .concat(
         sheep
       .map((s) => ({ type: "sheep", obj: s, sort: s.x + s.y }))
@@ -925,6 +1192,8 @@
     for (const item of drawables) {
       if (item.type === "tree") {
         drawTree(item.obj);
+      } else if (item.type === "boulder") {
+        drawBoulder(item.obj);
       } else if (item.type === "sheep") {
         drawSheepEntity(item.obj);
       } else {
@@ -1137,7 +1406,7 @@
       return;
     }
     pointer.active = true;
-    shepherd.sprintTimer = shepherd.sprintDuration;
+    pointer.sprintHeld = true;
     canvas.setPointerCapture(ev.pointerId);
     setPointerFromEvent(ev);
   });
@@ -1154,6 +1423,7 @@
 
   canvas.addEventListener("pointerup", (ev) => {
     pointer.active = ev.pointerType === "mouse";
+    pointer.sprintHeld = false;
     if (canvas.hasPointerCapture(ev.pointerId)) {
       canvas.releasePointerCapture(ev.pointerId);
     }
@@ -1161,6 +1431,7 @@
 
   canvas.addEventListener("pointerleave", () => {
     pointer.active = false;
+    pointer.sprintHeld = false;
   });
 
   window.addEventListener("keydown", (ev) => {

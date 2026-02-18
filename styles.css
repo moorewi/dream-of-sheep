@@ -33,13 +33,13 @@ body {
 }
 
 .app-shell {
-  width: min(1500px, 100vw);
+  width: 100vw;
   height: 100vh;
   margin: 0 auto;
-  padding: 16px;
+  padding: 8px;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 12px;
+  gap: 8px;
 }
 
 .hud {
