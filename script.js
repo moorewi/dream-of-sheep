@@ -550,10 +550,10 @@
   }
 
   function drawTile(x, y, backdrop = false) {
-    const z00 = terrainHeight(x, y);
-    const z10 = terrainHeight(x + 1, y);
-    const z11 = terrainHeight(x + 1, y + 1);
-    const z01 = terrainHeight(x, y + 1);
+    const z00 = terrainHeight(x, y) + (backdrop ? backdropLift(x, y) : 0);
+    const z10 = terrainHeight(x + 1, y) + (backdrop ? backdropLift(x + 1, y) : 0);
+    const z11 = terrainHeight(x + 1, y + 1) + (backdrop ? backdropLift(x + 1, y + 1) : 0);
+    const z01 = terrainHeight(x, y + 1) + (backdrop ? backdropLift(x, y + 1) : 0);
 
     const p0 = worldToScreen(x, y, z00);
     const p1 = worldToScreen(x + 1, y, z10);
@@ -581,6 +581,68 @@
       ctx.lineWidth = 1;
       ctx.stroke();
     }
+  }
+
+  function backdropLift(x, y) {
+    const ox = x < 0 ? -x : x > world.width ? x - world.width : 0;
+    const oy = y < 0 ? -y : y > world.height ? y - world.height : 0;
+    const edgeDist = Math.hypot(ox, oy);
+    const topBias = clamp((-y + 2) / (backgroundPad + 2), 0, 1);
+    const leftBias = clamp((-x + 2) / (backgroundPad + 2), 0, 1);
+    return edgeDist * 0.16 + topBias * 2.4 + leftBias * 1.1;
+  }
+
+  function drawMountainSilhouette(width, height) {
+    const yBase = height * 0.42;
+    const ridgeA = [
+      [0, yBase + 46],
+      [width * 0.08, yBase + 10],
+      [width * 0.15, yBase - 22],
+      [width * 0.24, yBase + 2],
+      [width * 0.34, yBase - 36],
+      [width * 0.43, yBase + 8],
+      [width * 0.55, yBase - 28],
+      [width * 0.66, yBase + 3],
+      [width * 0.79, yBase - 32],
+      [width * 0.9, yBase + 12],
+      [width, yBase + 26],
+      [width, height],
+      [0, height],
+    ];
+    const ridgeB = [
+      [0, yBase + 70],
+      [width * 0.12, yBase + 38],
+      [width * 0.21, yBase + 58],
+      [width * 0.33, yBase + 30],
+      [width * 0.47, yBase + 62],
+      [width * 0.61, yBase + 34],
+      [width * 0.75, yBase + 64],
+      [width * 0.89, yBase + 42],
+      [width, yBase + 58],
+      [width, height],
+      [0, height],
+    ];
+
+    const bgGrad = ctx.createLinearGradient(0, yBase - 50, 0, height);
+    bgGrad.addColorStop(0, "rgba(66, 88, 99, 0.5)");
+    bgGrad.addColorStop(1, "rgba(56, 79, 66, 0.68)");
+    ctx.fillStyle = bgGrad;
+    ctx.beginPath();
+    ctx.moveTo(ridgeA[0][0], ridgeA[0][1]);
+    for (let i = 1; i < ridgeA.length; i += 1) {
+      ctx.lineTo(ridgeA[i][0], ridgeA[i][1]);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(43, 63, 50, 0.45)";
+    ctx.beginPath();
+    ctx.moveTo(ridgeB[0][0], ridgeB[0][1]);
+    for (let i = 1; i < ridgeB.length; i += 1) {
+      ctx.lineTo(ridgeB[i][0], ridgeB[i][1]);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   function drawFence() {
@@ -709,11 +771,32 @@
   function drawSheepEntity(s) {
     const z = terrainHeight(s.x, s.y);
     const p = worldToScreen(s.x, s.y, z + 0.55);
+    const gaitSpeed = Math.hypot(s.vx, s.vy);
+    const gaitPhase = performance.now() * 0.013 * (0.35 + gaitSpeed * 1.7);
+    const gaitAmp = clamp(gaitSpeed * 0.95, 0.6, 2.2);
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
     ctx.beginPath();
     ctx.ellipse(p.x, p.y + 10, 11, 5, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.strokeStyle = "#393939";
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    const legLiftA = Math.sin(gaitPhase) * gaitAmp;
+    const legLiftB = Math.sin(gaitPhase + Math.PI) * gaitAmp;
+    const legs = [
+      { x: p.x - 6.5, lift: legLiftA },
+      { x: p.x - 2.2, lift: legLiftB },
+      { x: p.x + 2.4, lift: legLiftA },
+      { x: p.x + 6.4, lift: legLiftB },
+    ];
+    for (const leg of legs) {
+      ctx.beginPath();
+      ctx.moveTo(leg.x, p.y + 4.8 + Math.max(0, leg.lift * 0.2));
+      ctx.lineTo(leg.x, p.y + 11.2 - leg.lift * 0.35);
+      ctx.stroke();
+    }
 
     ctx.save();
     ctx.translate(p.x, p.y);
@@ -759,6 +842,7 @@
   function render() {
     const { width, height } = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, width, height);
+    drawMountainSilhouette(width, height);
 
     for (let y = -backgroundPad; y < world.height + backgroundPad; y += 1) {
       for (let x = -backgroundPad; x < world.width + backgroundPad; x += 1) {
