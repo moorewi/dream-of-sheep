@@ -39,10 +39,12 @@ body {
   padding: 8px;
   display: grid;
   grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr min(260px, 34vw);
   gap: 8px;
 }
 
 .hud {
+  grid-column: 1 / -1;
   position: relative;
   overflow: hidden;
   padding: 14px 16px;
@@ -203,6 +205,8 @@ body {
 
 
 canvas {
+  grid-column: 1;
+  grid-row: 2;
   width: 100%;
   height: 100%;
   border-radius: 18px;
@@ -215,6 +219,134 @@ canvas {
     radial-gradient(circle at 10% 8%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 38%),
     linear-gradient(145deg, rgba(250, 255, 252, 0.14), rgba(224, 243, 230, 0.06));
   backdrop-filter: blur(9px) saturate(1.08);
+}
+
+.sheep-roster-panel {
+  grid-column: 2;
+  grid-row: 2;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+  padding: 10px 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(235, 252, 242, 0.42);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(224, 243, 230, 0.12)),
+    rgba(235, 250, 242, 0.16);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 12px 24px rgba(12, 28, 17, 0.2);
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  canvas {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .sheep-roster-panel {
+    grid-column: 1;
+    grid-row: 3;
+    height: auto;
+    max-height: 30vh;
+  }
+}
+
+.sheep-roster-panel h2 {
+  margin: 0 0 0.35rem;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #143122;
+}
+
+.sheep-roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.sheep-roster li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.26rem 0.38rem;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 44, 28, 0.08);
+  background: rgba(255, 255, 255, 0.34);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.sheep-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  color: #13311f;
+}
+
+.sheep-icon {
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.sheep-mood {
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(28, 77, 45, 0.15);
+}
+
+.sheep-mood.is-calm,
+.sheep-mood.is-content,
+.sheep-mood.is-eating {
+  color: #1b5b33;
+  background: rgba(42, 128, 74, 0.14);
+}
+
+.sheep-mood.is-roaming {
+  color: #3f5f1f;
+  background: rgba(120, 146, 36, 0.17);
+}
+
+.sheep-mood.is-nervous {
+  color: #8a5a15;
+  background: rgba(176, 120, 31, 0.18);
+}
+
+.sheep-mood.is-panicked {
+  color: #8b1d17;
+  background: rgba(168, 48, 42, 0.2);
+}
+
+.sheep-row.is-calm,
+.sheep-row.is-content,
+.sheep-row.is-eating {
+  background: linear-gradient(90deg, rgba(45, 138, 80, 0.08), rgba(255, 255, 255, 0.3));
+}
+
+.sheep-row.is-roaming {
+  background: linear-gradient(90deg, rgba(139, 164, 48, 0.12), rgba(255, 255, 255, 0.3));
+}
+
+.sheep-row.is-nervous {
+  background: linear-gradient(90deg, rgba(184, 124, 38, 0.13), rgba(255, 255, 255, 0.3));
+}
+
+.sheep-row.is-panicked {
+  background: linear-gradient(90deg, rgba(176, 54, 46, 0.14), rgba(255, 255, 255, 0.32));
 }
 .sprint-meter {
   margin-top: 0.45rem;

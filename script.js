@@ -5,6 +5,7 @@
   const gateStatusEl = document.getElementById("gateStatus");
   const sprintStatusEl = document.getElementById("sprintStatus");
   const sprintBarEl = document.getElementById("sprintBar");
+  const sheepRosterEl = document.getElementById("sheepRoster");
   const pauseBtnEl = document.getElementById("pauseBtn");
   const buildStampEl = document.getElementById("buildStamp");
   const debugPanelEl = document.getElementById("debugPanel");
@@ -146,6 +147,12 @@
   };
 
   const SHEEP_TOTAL = 18;
+  const sheepNames = [
+    "Mabel", "Poppy", "Hazel", "Mochi", "Daisy", "Bramble",
+    "Juniper", "Nettle", "Biscuit", "Clover", "Maple", "Willow",
+    "Pebble", "Skipper", "Fern", "Toffee", "Sage", "Luna",
+    "Tilly", "Milo", "Dot", "Wren", "Roo", "Patches",
+  ];
   const sheep = [];
   for (let i = 0; i < SHEEP_TOTAL; i += 1) {
     sheep.push({
@@ -160,6 +167,7 @@
       scatterX: 0,
       scatterY: 0,
       scatterTimer: 0,
+      name: sheepNames[i] || `Sheep ${String(i + 1).padStart(2, "0")}`,
     });
   }
 
@@ -174,6 +182,7 @@
   let debugGrid = false;
   let paused = false;
   const pauseFont = "Rubik";
+  let rosterUpdateTimer = 0;
   let lastT = performance.now();
   const buildTime = new Date().toLocaleString();
   const weightDefs = [
@@ -446,6 +455,48 @@
       : `Power: ${(ratio * 100).toFixed(0)}%`;
   }
 
+  function getSheepMood(s) {
+    if (isInPen(s)) {
+      return { label: "happy/eating", cls: "is-eating", icon: "*" };
+    }
+    if (s.panic > 0.66) {
+      return { label: "panicked", cls: "is-panicked", icon: "!!" };
+    }
+    if (s.panic > 0.32) {
+      return { label: "nervous", cls: "is-nervous", icon: "~" };
+    }
+    if (Math.hypot(s.vx, s.vy) < 0.42) {
+      return { label: "calm", cls: "is-calm", icon: "-" };
+    }
+    return { label: "roaming", cls: "is-roaming", icon: ">" };
+  }
+
+  function syncSheepRoster() {
+    if (!sheepRosterEl) {
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    for (const s of sheep) {
+      const mood = getSheepMood(s);
+      const item = document.createElement("li");
+      const name = document.createElement("span");
+      const icon = document.createElement("span");
+      const moodTag = document.createElement("span");
+      item.className = `sheep-row ${mood.cls}`;
+      name.className = "sheep-name";
+      icon.className = "sheep-icon";
+      icon.textContent = mood.icon;
+      name.textContent = s.name;
+      moodTag.className = `sheep-mood ${mood.cls}`;
+      moodTag.textContent = mood.label;
+      name.prepend(icon);
+      item.appendChild(name);
+      item.appendChild(moodTag);
+      fragment.appendChild(item);
+    }
+    sheepRosterEl.replaceChildren(fragment);
+  }
+
   function syncPauseButton() {
     if (!pauseBtnEl) {
       return;
@@ -543,6 +594,7 @@
 
     for (let i = 0; i < sheep.length; i += 1) {
       const s = sheep[i];
+      const inPenNow = isInPen(s);
       s.wanderAngle += (Math.random() - 0.5) * 0.95;
 
       const [wanderX, wanderY] = [Math.cos(s.wanderAngle), Math.sin(s.wanderAngle)];
@@ -557,13 +609,13 @@
       let fearX = 0;
       let fearY = 0;
 
-      if (shepherdDist < fearRadius) {
+      if (!inPenNow && shepherdDist < fearRadius) {
         const panic = (fearRadius - shepherdDist) / fearRadius;
         s.panic = panic;
         fearX = (fromShepherdX / Math.max(0.001, shepherdDist)) * panic;
         fearY = (fromShepherdY / Math.max(0.001, shepherdDist)) * panic;
       } else {
-        s.panic *= 0.94;
+        s.panic *= inPenNow ? 0.82 : 0.94;
       }
 
       s.scatterTimer -= dt;
@@ -642,7 +694,7 @@
         [aliX, aliY] = normalize(alignX / flockCount, alignY / flockCount);
       }
 
-      const speed = behaviorWeights.speedBase + s.panic * behaviorWeights.panicSpeedBoost;
+      const speed = (behaviorWeights.speedBase + s.panic * behaviorWeights.panicSpeedBoost) * (inPenNow ? 0.58 : 1);
       const downhillWeight = Math.max(
         0,
         behaviorWeights.downhillBase * (1 - s.panic * behaviorWeights.downhillPanicDecay)
@@ -654,8 +706,7 @@
       const fearDrive = fearWeight * (1.25 + s.panic * 1.15);
       const cohesionWeight = Math.max(0.05, 0.32 - s.panic * 0.18);
       const alignmentWeight = Math.max(0.04, 0.28 - s.panic * 0.16);
-      const inPen = isInPen(s);
-      const foodWeightBase = inPen ? 0.9 : 0;
+      const foodWeightBase = inPenNow ? 1.35 : 0;
       const foodWeight = foodWeightBase * clamp((8 - nearestFoodDist) / 8, 0, 1);
 
       s.vx = (
@@ -726,6 +777,11 @@
     sheepCountEl.textContent = `Sheep: ${penned}/${SHEEP_TOTAL}`;
     syncGateStatus();
     syncSprintHud();
+    rosterUpdateTimer -= dt;
+    if (rosterUpdateTimer <= 0) {
+      syncSheepRoster();
+      rosterUpdateTimer = 0.22;
+    }
   }
 
   function drawTile(x, y, backdrop = false) {
@@ -1458,6 +1514,7 @@
   buildStampEl.textContent = "";
   buildDebugControls();
   syncWeightControls();
+  syncSheepRoster();
   resize();
   requestAnimationFrame(frame);
   loadWeightsFromServer();
