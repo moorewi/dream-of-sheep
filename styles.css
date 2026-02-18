@@ -1,13 +1,13 @@
 :root {
-  --sky-top: #93d2ea;
-  --sky-mid: #c8e8f4;
-  --sky-bottom: #f5fcff;
+  --sky-top: #7fb7e6;
+  --sky-mid: #b6d8ef;
+  --sky-bottom: #eaf6ff;
   --mountain-far: #8ca79a;
   --mountain-near: #5f7f6f;
   --ground-dark: #3f5e46;
   --ground-light: #638765;
-  --panel-bg: rgba(255, 255, 255, 0.7);
-  --panel-border: rgba(16, 41, 24, 0.16);
+  --panel-bg: rgba(240, 255, 248, 0.18);
+  --panel-border: rgba(223, 245, 232, 0.34);
   --text-main: #163120;
 }
 
@@ -26,7 +26,8 @@ body {
   font-family: "Manrope", sans-serif;
   color: var(--text-main);
   background:
-    radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0) 36%),
+    radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 40%),
+    radial-gradient(circle at 82% 8%, rgba(221, 241, 255, 0.45), rgba(221, 241, 255, 0) 34%),
     linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-mid) 45%, var(--sky-bottom) 100%);
   overflow: hidden;
 }
@@ -42,27 +43,84 @@ body {
 }
 
 .hud {
+  position: relative;
+  overflow: hidden;
   padding: 14px 16px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  backdrop-filter: blur(6px);
+  background:
+    radial-gradient(circle at 10% 16%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 44%),
+    linear-gradient(148deg, rgba(255, 255, 255, 0.32), rgba(224, 243, 230, 0.08) 58%, rgba(186, 214, 196, 0.14)),
+    var(--panel-bg);
+  border: 1px solid rgba(235, 252, 242, 0.48);
+  border-radius: 18px;
+  box-shadow:
+    0 18px 36px rgba(12, 28, 17, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -10px 18px rgba(164, 198, 176, 0.12);
+  backdrop-filter: blur(18px) saturate(1.22);
+}
+
+.hud::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 16px;
+  border: 1px solid rgba(245, 255, 250, 0.46);
+  pointer-events: none;
+}
+
+.hud::after {
+  content: "";
+  position: absolute;
+  inset: -35% -12% auto;
+  height: 78%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0));
+  pointer-events: none;
 }
 
 .hud h1 {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
   margin: 0;
+  padding: 0.38rem 0.72rem 0.42rem;
+  border-radius: 14px;
+  border: 1px solid rgba(243, 255, 248, 0.48);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.3), rgba(208, 233, 216, 0.16)),
+    rgba(231, 248, 238, 0.16);
   font-size: clamp(1.4rem, 2.8vw, 2rem);
   line-height: 1;
-  font-family: "DM Serif Display", serif;
+  font-family: "Manrope", sans-serif;
+  font-weight: 800;
   letter-spacing: 0.02em;
+  text-transform: uppercase;
+  box-shadow:
+    0 8px 18px rgba(15, 35, 21, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  color: var(--text-main);
 }
 
 .hud h1 small {
   font-family: "Manrope", sans-serif;
   font-size: 0.5em;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  opacity: 0.72;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: rgba(20, 43, 29, 0.78);
+  opacity: 0.88;
+  text-transform: none;
+}
+
+.hero-title {
+  display: inline-block;
+  background: linear-gradient(180deg, #ffffff 0%, #f0d39a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 1.2px rgba(34, 26, 9, 0.66);
+  paint-order: stroke fill;
+  text-shadow: 0 2px 8px rgba(14, 29, 18, 0.24);
 }
 
 .hud p {
@@ -73,6 +131,7 @@ body {
 .stats {
   margin-top: 0.8rem;
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   font-size: 0.92rem;
   font-weight: 700;
@@ -142,11 +201,49 @@ body {
   width: 100%;
 }
 
+
 canvas {
   width: 100%;
   height: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(23, 54, 33, 0.24);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
-  background: transparent;
+  border-radius: 18px;
+  border: 1px solid rgba(223, 245, 232, 0.36);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 0 0 1px rgba(245, 255, 250, 0.18);
+  background:
+    radial-gradient(circle at 10% 8%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(145deg, rgba(250, 255, 252, 0.14), rgba(224, 243, 230, 0.06));
+  backdrop-filter: blur(9px) saturate(1.08);
+}
+.sprint-meter {
+  margin-top: 0.45rem;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(22, 49, 32, 0.14);
+  border: 1px solid rgba(16, 41, 24, 0.12);
+  overflow: hidden;
+}
+
+.sprint-bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #d9781f 0%, #f1ab48 100%);
+  transition: width 80ms linear;
+}
+
+.hud-actions {
+  margin-top: 0.55rem;
+}
+
+.hud-actions button {
+  border: 1px solid rgba(16, 41, 24, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--text-main);
+  font-family: "Manrope", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.36rem 0.82rem;
+  cursor: pointer;
 }

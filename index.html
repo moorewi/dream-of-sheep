@@ -6,17 +6,24 @@
   <title>Sheep Herding on the Mountainside</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@700&family=Sora:wght@700;800&family=Nunito:wght@700;800;900&family=Outfit:wght@700;800&family=Plus+Jakarta+Sans:wght@700;800&family=Rubik:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=202602172434" />
 </head>
 <body>
   <main class="app-shell">
     <header class="hud">
-      <h1>Sheep Herding <small id="buildStamp">build --</small></h1>
+      <h1><span class="hero-title">Sheep Herding</span> <small id="buildStamp">build --</small></h1>
       <p>Move the shepherd with your pointer and guide the flock across the mountainside. Press G near the gate to close it.</p>
       <div class="stats">
         <span id="sheepCount">Sheep: 0</span>
         <span id="gateStatus">Gate: Open</span>
+        <span id="sprintStatus">Sprint: ready</span>
+      </div>
+      <div class="sprint-meter" aria-label="Sprint timer">
+        <div id="sprintBar" class="sprint-bar"></div>
+      </div>
+      <div class="hud-actions">
+        <button id="pauseBtn" type="button">Pause</button>
       </div>
       <section id="debugPanel" class="debug-panel" aria-label="Debug controls">
         <div class="debug-header">
@@ -28,6 +35,6 @@
     </header>
     <canvas id="world" aria-label="Sheep herding simulation"></canvas>
   </main>
-  <script src="script.js?v=202602172210"></script>
+  <script src="script.js?v=202602172434"></script>
 </body>
 </html>

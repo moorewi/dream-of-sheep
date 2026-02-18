@@ -3,6 +3,9 @@
   const ctx = canvas.getContext("2d");
   const sheepCountEl = document.getElementById("sheepCount");
   const gateStatusEl = document.getElementById("gateStatus");
+  const sprintStatusEl = document.getElementById("sprintStatus");
+  const sprintBarEl = document.getElementById("sprintBar");
+  const pauseBtnEl = document.getElementById("pauseBtn");
   const buildStampEl = document.getElementById("buildStamp");
   const debugPanelEl = document.getElementById("debugPanel");
   const weightControlsEl = document.getElementById("weightControls");
@@ -93,6 +96,9 @@
     radius: 0.34,
     speed: 6.6,
     heading: 0,
+    sprintTimer: 0,
+    sprintDuration: 1.0,
+    sprintMultiplier: 1.26,
   };
 
   const SHEEP_TOTAL = 18;
@@ -122,6 +128,8 @@
   ];
 
   let debugGrid = false;
+  let paused = false;
+  const pauseFont = "Rubik";
   let lastT = performance.now();
   const buildTime = new Date().toLocaleString();
   const weightDefs = [
@@ -161,6 +169,23 @@
       return [0, 0];
     }
     return [x / l, y / l];
+  }
+
+  function getRowBounds(y) {
+    const t = clamp(y / Math.max(1, world.height - 1), 0, 1);
+    const leftInset = 1.8 + Math.sin(t * 3.8 + 0.6) * 1.05 + (1 - t) * 2.2;
+    const rightInset = 0.7 + Math.sin(t * 4.4 + 1.8) * 0.35 + t * 1.6;
+    const minX = clamp(leftInset, 0.5, world.width - 7);
+    const maxX = clamp(world.width - rightInset, minX + 6.5, world.width - 0.5);
+    return { minX, maxX };
+  }
+
+  function isInPlayableArea(x, y, margin = 0) {
+    if (y < margin || y > world.height - margin) {
+      return false;
+    }
+    const bounds = getRowBounds(clamp(y, 0, world.height));
+    return x >= bounds.minX + margin && x <= bounds.maxX - margin;
   }
 
   function wrapAngle(a) {
@@ -285,8 +310,15 @@
   }
 
   function enforceWorldBounds(entity) {
-    entity.x = clamp(entity.x, entity.radius, world.width - entity.radius);
     entity.y = clamp(entity.y, entity.radius, world.height - entity.radius);
+    const row = getRowBounds(entity.y);
+    const minX = row.minX + entity.radius;
+    const maxX = row.maxX - entity.radius;
+    if (maxX <= minX) {
+      entity.x = (minX + maxX) * 0.5;
+      return;
+    }
+    entity.x = clamp(entity.x, minX, maxX);
   }
 
   function collideFences(entity) {
@@ -323,6 +355,30 @@
     gateStatusEl.textContent = `Gate: ${gate.closed ? "Closed" : "Open"}${interactHint}`;
   }
 
+  function syncSprintHud() {
+    if (!sprintStatusEl || !sprintBarEl) {
+      return;
+    }
+    const duration = Math.max(0.001, shepherd.sprintDuration);
+    const ratio = clamp(shepherd.sprintTimer / duration, 0, 1);
+    sprintBarEl.style.width = `${(ratio * 100).toFixed(1)}%`;
+    sprintStatusEl.textContent = shepherd.sprintTimer > 0
+      ? `Sprint: ${shepherd.sprintTimer.toFixed(1)}s`
+      : "Sprint: ready";
+  }
+
+  function syncPauseButton() {
+    if (!pauseBtnEl) {
+      return;
+    }
+    pauseBtnEl.textContent = paused ? "Resume" : "Pause";
+  }
+
+  function togglePause() {
+    paused = !paused;
+    syncPauseButton();
+  }
+
   function separateEntities(a, b, extra = 0.02) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -352,12 +408,14 @@
   }
 
   function update(dt) {
+    shepherd.sprintTimer = Math.max(0, shepherd.sprintTimer - dt);
     const toTargetX = pointer.worldX - shepherd.x;
     const toTargetY = pointer.worldY - shepherd.y;
     const distToTarget = Math.hypot(toTargetX, toTargetY);
 
     if (pointer.active && distToTarget > 0.02) {
-      const step = Math.min(distToTarget, shepherd.speed * dt);
+      const sprintBoost = shepherd.sprintTimer > 0 ? shepherd.sprintMultiplier : 1;
+      const step = Math.min(distToTarget, shepherd.speed * sprintBoost * dt);
       const moveX = (toTargetX / distToTarget) * step;
       const moveY = (toTargetY / distToTarget) * step;
       shepherd.x += (toTargetX / distToTarget) * step;
@@ -547,6 +605,7 @@
     const penned = sheep.filter(isInPen).length;
     sheepCountEl.textContent = `Sheep: ${penned}/${SHEEP_TOTAL}`;
     syncGateStatus();
+    syncSprintHud();
   }
 
   function drawTile(x, y, backdrop = false) {
@@ -846,7 +905,7 @@
 
     for (let y = -backgroundPad; y < world.height + backgroundPad; y += 1) {
       for (let x = -backgroundPad; x < world.width + backgroundPad; x += 1) {
-        const inPlayable = x >= 0 && x < world.width && y >= 0 && y < world.height;
+        const inPlayable = isInPlayableArea(x + 0.5, y + 0.5);
         drawTile(x, y, !inPlayable);
       }
     }
@@ -879,12 +938,61 @@
       ctx.fillText("Debug grid: on (press D)", 14, 20);
       ctx.fillText(`Build: ${buildTime}`, 14, 38);
     }
+
+    if (paused) {
+      const t = performance.now() * 0.001;
+      const pulse = (Math.sin(t * 2.4) + 1) * 0.5;
+
+      ctx.fillStyle = "rgba(8, 19, 11, 0.32)";
+      ctx.fillRect(0, 0, width, height);
+
+      const cardW = Math.min(width * 0.6, 560);
+      const cardH = 186;
+      const cardX = width * 0.5 - cardW * 0.5;
+      const cardY = height * 0.5 - cardH * 0.5 - 8;
+      const radius = 18;
+
+      ctx.fillStyle = "rgba(250, 255, 252, 0.13)";
+      ctx.strokeStyle = "rgba(240, 255, 246, 0.32)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(cardX, cardY, cardW, cardH, radius);
+      ctx.fill();
+      ctx.stroke();
+
+      const label = "PAUSED";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const grad = ctx.createLinearGradient(0, cardY + 26, 0, cardY + 124);
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(1, "#f5dba0");
+
+      ctx.shadowColor = "rgba(12, 32, 18, 0.38)";
+      ctx.shadowBlur = 16 + pulse * 8;
+      ctx.shadowOffsetY = 5;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(41, 28, 10, 0.42)";
+      const titleSize = Math.max(54, Math.min(88, Math.floor(width * 0.08)));
+      ctx.font = `900 ${Math.floor(titleSize * (0.98 + pulse * 0.03))}px "${pauseFont}", sans-serif`;
+      ctx.strokeText(label, width * 0.5, height * 0.5 - 12);
+      ctx.fillStyle = grad;
+      ctx.fillText(label, width * 0.5, height * 0.5 - 12);
+
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+
+      ctx.textAlign = "start";
+      ctx.textBaseline = "alphabetic";
+    }
   }
 
   function frame(now) {
     const dt = clamp((now - lastT) / 1000, 0.001, 0.033);
     lastT = now;
-    update(dt);
+    if (!paused) {
+      update(dt);
+    }
     render();
     requestAnimationFrame(frame);
   }
@@ -894,8 +1002,9 @@
     const x = ev.clientX - rect.left;
     const y = ev.clientY - rect.top;
     const worldPos = screenToWorld(x, y);
-    pointer.worldX = clamp(worldPos.x, 0, world.width);
     pointer.worldY = clamp(worldPos.y, 0, world.height);
+    const row = getRowBounds(pointer.worldY);
+    pointer.worldX = clamp(worldPos.x, row.minX, row.maxX);
   }
 
   function formatWeightValue(value) {
@@ -1024,7 +1133,11 @@
   }
 
   canvas.addEventListener("pointerdown", (ev) => {
+    if (paused) {
+      return;
+    }
     pointer.active = true;
+    shepherd.sprintTimer = shepherd.sprintDuration;
     canvas.setPointerCapture(ev.pointerId);
     setPointerFromEvent(ev);
   });
@@ -1058,7 +1171,13 @@
     } else if (key === "g" && isShepherdNearGate()) {
       gate.closed = !gate.closed;
       syncGateStatus();
+    } else if (key === "p") {
+      togglePause();
     }
+  });
+
+  pauseBtnEl.addEventListener("click", () => {
+    togglePause();
   });
 
   exportYamlBtn.addEventListener("click", downloadWeightsYaml);
@@ -1072,6 +1191,7 @@
   requestAnimationFrame(frame);
   loadWeightsFromServer();
   syncGateStatus();
+  syncPauseButton();
 
   function syncDebugBuildStamp() {
     buildStampEl.textContent = debugGrid ? `build ${buildTime}` : "";
