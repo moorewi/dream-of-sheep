@@ -409,6 +409,7 @@
                     const ody = other.y - this.y;
                     const odist = Math.sqrt(odx * odx + ody * ody);
                     
+                    // Check if other sheep is within flocking range (5 units)
                     if (odist < 5 && odist > 0) {
                         // Cohesion - move toward center of nearby sheep
                         cohesionX += other.x;
@@ -681,6 +682,8 @@
             keys: {},
             offsetX: 0,
             offsetY: 0,
+            lastFrameTime: Date.now(),
+            fps: 60,
             
             init() {
                 config.canvas = document.getElementById('gameCanvas');
@@ -813,6 +816,12 @@
             },
             
             update() {
+                // Calculate FPS
+                const now = Date.now();
+                const delta = now - this.lastFrameTime;
+                this.fps = Math.round(1000 / delta);
+                this.lastFrameTime = now;
+                
                 this.shepherd.update(this.keys, this.terrain);
                 this.sheep.forEach(sheep => {
                     sheep.update(this.shepherd, this.sheep, this.terrain, config.params);
@@ -893,7 +902,7 @@
                     Sheep: ${this.sheep.length}<br>
                     Shepherd: (${this.shepherd.x.toFixed(1)}, ${this.shepherd.y.toFixed(1)})<br>
                     Gate: ${config.gateOpen ? 'OPEN' : 'CLOSED'}<br>
-                    FPS: ${(1000 / 16.67).toFixed(0)}
+                    FPS: ${this.fps}
                 `;
             },
             

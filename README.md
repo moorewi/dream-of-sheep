@@ -27,7 +27,7 @@ The sheep exhibit realistic flocking behaviors:
 ### Debug Mode (D key)
 Press D to toggle an advanced debug panel featuring:
 - **Grid Overlay**: Visual coordinate grid on the terrain
-- **Build Info**: Real-time statistics (sheep count, shepherd position, gate status, FPS)
+- **Game Statistics**: Real-time statistics (sheep count, shepherd position, gate status, FPS)
 - **Live Behavior Sliders**: Adjust AI parameters in real-time:
   - Flee Distance: How far the shepherd must be before sheep feel safe
   - Flee Speed: How fast sheep run from the shepherd
