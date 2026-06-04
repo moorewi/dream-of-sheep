@@ -145,6 +145,7 @@
     sprintDrainRate: 0.95,
     sprintRegenRate: 0.34,
     sprinting: false,
+    moveSpeed: 0,
   };
 
   const SHEEP_TOTAL = 18;
@@ -168,6 +169,8 @@
       scatterX: 0,
       scatterY: 0,
       scatterTimer: 0,
+      emotionKey: "calm",
+      emotionPulse: 0,
       name: sheepNames[i] || `Sheep ${String(i + 1).padStart(2, "0")}`,
     });
   }
@@ -452,19 +455,53 @@
   }
 
   function getSheepMood(s) {
-    if (isInPen(s)) {
+    const key = getSheepEmotionKey(s);
+    if (key === "eating") {
       return { label: "happy/eating", cls: "is-eating", icon: "*" };
     }
-    if (s.panic > 0.66) {
+    if (key === "panicked") {
       return { label: "panicked", cls: "is-panicked", icon: "!!" };
     }
-    if (s.panic > 0.32) {
+    if (key === "nervous") {
       return { label: "nervous", cls: "is-nervous", icon: "~" };
     }
-    if (Math.hypot(s.vx, s.vy) < 0.42) {
+    if (key === "calm") {
       return { label: "calm", cls: "is-calm", icon: "-" };
     }
     return { label: "roaming", cls: "is-roaming", icon: ">" };
+  }
+
+  function getSheepEmotionKey(s) {
+    if (isInPen(s)) {
+      return "eating";
+    }
+    if (s.panic > 0.66) {
+      return "panicked";
+    }
+    if (s.panic > 0.32) {
+      return "nervous";
+    }
+    if (Math.hypot(s.vx, s.vy) < 0.42) {
+      return "calm";
+    }
+    return "roaming";
+  }
+
+  function getSheepEmotionVisual(s) {
+    const key = getSheepEmotionKey(s);
+    if (key === "eating") {
+      return { r: 74, g: 174, b: 107, baseAlpha: 0.18 };
+    }
+    if (key === "panicked") {
+      return { r: 222, g: 72, b: 54, baseAlpha: 0.22 };
+    }
+    if (key === "nervous") {
+      return { r: 232, g: 164, b: 54, baseAlpha: 0.18 };
+    }
+    if (key === "calm") {
+      return { r: 93, g: 160, b: 98, baseAlpha: 0.11 };
+    }
+    return { r: 122, g: 151, b: 54, baseAlpha: 0.13 };
   }
 
   function syncSheepRoster() {
@@ -577,6 +614,7 @@
       const moveY = (toTargetY / distToTarget) * step;
       shepherd.x += (toTargetX / distToTarget) * step;
       shepherd.y += (toTargetY / distToTarget) * step;
+      shepherd.moveSpeed = step / Math.max(dt, 0.001);
       const screenDirX = moveX - moveY;
       const screenDirY = moveX + moveY;
       if (Math.hypot(screenDirX, screenDirY) > 0.001) {
@@ -586,6 +624,8 @@
           8 * dt
         );
       }
+    } else {
+      shepherd.moveSpeed *= Math.max(0, 1 - dt * 12);
     }
 
     for (let i = 0; i < sheep.length; i += 1) {
@@ -736,6 +776,14 @@
         const targetHeading = Math.atan2(screenDirY, screenDirX);
         const maxTurnRate = 2.6 + s.panic * 1.4;
         s.heading = turnToward(s.heading, targetHeading, maxTurnRate * dt);
+      }
+
+      const emotionKey = getSheepEmotionKey(s);
+      if (emotionKey !== s.emotionKey) {
+        s.emotionKey = emotionKey;
+        s.emotionPulse = 1;
+      } else {
+        s.emotionPulse = Math.max(0, s.emotionPulse - dt * 1.6);
       }
     }
 
@@ -1146,8 +1194,20 @@
     const z = terrainHeight(s.x, s.y);
     const p = worldToScreen(s.x, s.y, z + 0.55);
     const gaitSpeed = Math.hypot(s.vx, s.vy);
-    const gaitPhase = performance.now() * 0.013 * (0.35 + gaitSpeed * 1.7);
-    const gaitAmp = clamp(gaitSpeed * 0.95, 0.6, 2.2);
+    const gaitRatio = clamp(gaitSpeed / 3.4, 0, 1.25);
+    const gaitPhase = performance.now() * 0.026 * gaitRatio;
+    const gaitAmp = gaitRatio > 0.04 ? 2.1 * Math.min(gaitRatio, 1) : 0;
+    const bodyBob = gaitAmp > 0 ? Math.abs(Math.sin(gaitPhase * 2)) * 0.85 : 0;
+    const emotion = getSheepEmotionVisual(s);
+    const pulse = s.emotionPulse || 0;
+    const pulseEase = pulse * pulse;
+    const auraAlpha = emotion.baseAlpha + pulseEase * 0.24;
+    const auraScale = 1 + pulseEase * 0.45;
+
+    ctx.fillStyle = `rgba(${emotion.r}, ${emotion.g}, ${emotion.b}, ${auraAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 10, 16 * auraScale, 7 * auraScale, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
     ctx.beginPath();
@@ -1157,23 +1217,23 @@
     ctx.strokeStyle = "#393939";
     ctx.lineWidth = 1.6;
     ctx.lineCap = "round";
-    const legLiftA = Math.sin(gaitPhase) * gaitAmp;
-    const legLiftB = Math.sin(gaitPhase + Math.PI) * gaitAmp;
     const legs = [
-      { x: p.x - 6.5, lift: legLiftA },
-      { x: p.x - 2.2, lift: legLiftB },
-      { x: p.x + 2.4, lift: legLiftA },
-      { x: p.x + 6.4, lift: legLiftB },
+      { x: p.x - 6.5, phase: 0 },
+      { x: p.x - 2.2, phase: Math.PI },
+      { x: p.x + 2.4, phase: Math.PI },
+      { x: p.x + 6.4, phase: 0 },
     ];
     for (const leg of legs) {
+      const lift = Math.max(0, Math.cos(gaitPhase + leg.phase)) * gaitAmp;
+      const tuck = Math.sin(gaitPhase + leg.phase) * gaitAmp * 0.35;
       ctx.beginPath();
-      ctx.moveTo(leg.x, p.y + 4.8 + Math.max(0, leg.lift * 0.2));
-      ctx.lineTo(leg.x, p.y + 11.2 - leg.lift * 0.35);
+      ctx.moveTo(leg.x, p.y + 4.8 - bodyBob);
+      ctx.lineTo(leg.x + tuck, p.y + 11.2 - lift);
       ctx.stroke();
     }
 
     ctx.save();
-    ctx.translate(p.x, p.y);
+    ctx.translate(p.x, p.y - bodyBob);
     ctx.rotate(s.heading);
 
     ctx.fillStyle = "#f5f5f3";
@@ -1201,10 +1261,14 @@
     const bodyW = 8.5 + sideAmount * 5.5;
     const bodyH = 7 + frontAmount * 2.4;
     const legSpread = 4.2 + sideAmount * 5.8;
+    const gaitSpeed = clamp(shepherd.moveSpeed / shepherd.speed, 0, 1.4);
+    const gaitPhase = performance.now() * 0.028 * gaitSpeed;
+    const gaitAmp = gaitSpeed > 0.04 ? 2.5 * Math.min(gaitSpeed, 1) : 0;
+    const bodyBob = gaitAmp > 0 ? Math.abs(Math.sin(gaitPhase * 2)) * 1.1 : 0;
     const headX = p.x + nx * 10;
-    const headY = p.y - 2 + ny * 7;
+    const headY = p.y - 2 + ny * 7 - bodyBob;
     const tailX = p.x - nx * (8 + sideAmount * 5);
-    const tailY = p.y - 2 - ny * (6 + frontAmount * 3);
+    const tailY = p.y - 2 - ny * (6 + frontAmount * 3) - bodyBob;
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
     ctx.beginPath();
@@ -1214,11 +1278,18 @@
     ctx.strokeStyle = "#2b1b12";
     ctx.lineWidth = 2.4;
     ctx.lineCap = "round";
-    const legs = [-legSpread, -legSpread * 0.35, legSpread * 0.35, legSpread];
-    for (const x of legs) {
+    const legs = [
+      { x: -legSpread, phase: 0 },
+      { x: -legSpread * 0.35, phase: Math.PI },
+      { x: legSpread * 0.35, phase: Math.PI },
+      { x: legSpread, phase: 0 },
+    ];
+    for (const leg of legs) {
+      const stride = Math.sin(gaitPhase + leg.phase) * gaitAmp;
+      const lift = Math.max(0, Math.cos(gaitPhase + leg.phase)) * gaitAmp * 1.15;
       ctx.beginPath();
-      ctx.moveTo(p.x + x, p.y + 4);
-      ctx.lineTo(p.x + x - nx * 1.2, p.y + 11);
+      ctx.moveTo(p.x + leg.x, p.y + 4 - bodyBob);
+      ctx.lineTo(p.x + leg.x - nx * (1.2 + stride), p.y + 11 - lift);
       ctx.stroke();
     }
 
@@ -1231,7 +1302,7 @@
 
     ctx.fillStyle = "#6b4328";
     ctx.beginPath();
-    ctx.ellipse(p.x - nx * 2, p.y, bodyW, bodyH, -0.12 * sideAmount, 0, Math.PI * 2);
+    ctx.ellipse(p.x - nx * 2, p.y - bodyBob, bodyW, bodyH, -0.12 * sideAmount, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#4c2d1c";
