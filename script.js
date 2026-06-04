@@ -31,7 +31,8 @@
     x: 0,
     y: 0,
   };
-  let viewScale = 1;
+  const fixedViewScale = 0.62;
+  let viewScale = fixedViewScale;
 
   const pointer = {
     active: false,
@@ -353,13 +354,8 @@
     canvas.height = Math.floor(rect.height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const margin = 8;
     const { minZ, maxZ } = getTerrainZRange();
-    const isoWidth = (world.width + world.height) * (world.tileW / 2);
-    const isoHeight = (world.width + world.height) * (world.tileH / 2) + (maxZ - minZ) * world.elevationScale;
-    const fitW = Math.max(0.2, (rect.width - margin * 2) / isoWidth);
-    const fitH = Math.max(0.2, (rect.height - margin * 2) / isoHeight);
-    viewScale = Math.min(fitW, fitH) * 1.05;
+    viewScale = fixedViewScale;
 
     const tileW = world.tileW * viewScale;
     const tileH = world.tileH * viewScale;
@@ -1195,26 +1191,66 @@
   function drawShepherd() {
     const z = terrainHeight(shepherd.x, shepherd.y);
     const p = worldToScreen(shepherd.x, shepherd.y, z + 0.5);
+    const faceX = Math.cos(shepherd.heading);
+    const faceY = Math.sin(shepherd.heading) * 0.35;
+    const faceLen = Math.hypot(faceX, faceY) || 1;
+    const nx = faceX / faceLen;
+    const ny = faceY / faceLen;
+    const sideAmount = Math.abs(nx);
+    const frontAmount = 1 - sideAmount;
+    const bodyW = 8.5 + sideAmount * 5.5;
+    const bodyH = 7 + frontAmount * 2.4;
+    const legSpread = 4.2 + sideAmount * 5.8;
+    const headX = p.x + nx * 10;
+    const headY = p.y - 2 + ny * 7;
+    const tailX = p.x - nx * (8 + sideAmount * 5);
+    const tailY = p.y - 2 - ny * (6 + frontAmount * 3);
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 9, 12, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(p.x, p.y + 10, 15, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(shepherd.heading);
+    ctx.strokeStyle = "#2b1b12";
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    const legs = [-legSpread, -legSpread * 0.35, legSpread * 0.35, legSpread];
+    for (const x of legs) {
+      ctx.beginPath();
+      ctx.moveTo(p.x + x, p.y + 4);
+      ctx.lineTo(p.x + x - nx * 1.2, p.y + 11);
+      ctx.stroke();
+    }
 
-    ctx.fillStyle = "#4a2d1d";
+    ctx.strokeStyle = "#6b3f22";
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.ellipse(-2, 0, 13, 7.5, -0.2, 0, Math.PI * 2);
+    ctx.moveTo(tailX, tailY);
+    ctx.quadraticCurveTo(tailX - nx * 6, tailY - 9, tailX - nx * 3, tailY - 16);
+    ctx.stroke();
+
+    ctx.fillStyle = "#6b4328";
+    ctx.beginPath();
+    ctx.ellipse(p.x - nx * 2, p.y, bodyW, bodyH, -0.12 * sideAmount, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#f2d28d";
+    ctx.fillStyle = "#4c2d1c";
     ctx.beginPath();
-    ctx.arc(9, -1, 3.5, 0, Math.PI * 2);
+    ctx.ellipse(headX, headY, 7, 5.6, 0.1, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
+
+    ctx.fillStyle = "#2f1d13";
+    ctx.beginPath();
+    ctx.ellipse(headX - 4.6, headY + 2, 2.7, 6.4, 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(headX + 3.8, headY + 2.2, 2.6, 6.1, -0.16, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#1b100b";
+    ctx.beginPath();
+    ctx.arc(headX + nx * 5, headY + ny * 2, 1.8, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function render() {
